@@ -42,3 +42,26 @@
   background: rgba(255, 199, 78, 0.40);
   color: transparent;
 }
+/* Mobile PDF scrolling improvements */
+@media (max-width: 650px) {
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior-y: none;
+  }
+
+  .reader-scroll {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
+
+  .text-layer {
+    touch-action: pan-y;
+  }
+
+  .guide-line {
+    pointer-events: none;
+  }
+}
