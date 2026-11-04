@@ -44,6 +44,9 @@ paper.addEventListener('pointermove',e=>{if(!(state.guide||state.focus))return;c
 $('immersive').onchange=e=>{workspace.classList.toggle('immersive',e.target.checked);setTimeout(renderPage,80);};
 $('settings-toggle').onclick=()=>{if(window.innerWidth<=650)workspace.classList.toggle('settings-open');else {$('immersive').checked=!$('immersive').checked;workspace.classList.toggle('immersive',$('immersive').checked);setTimeout(renderPage,80);}};
 $('mobile-settings').onclick=()=>workspace.classList.toggle('settings-open');
+document.getElementById('close-settings').addEventListener('click', () => {
+  workspace.classList.remove('settings-open');
+});
 function openPanel(){workspace.classList.add('panel-open');workspace.classList.remove('panel-closed');}
 function closePanel(){workspace.classList.remove('panel-open');if(window.innerWidth>1120){workspace.classList.add('panel-closed');setTimeout(renderPage,100);}}
 $('panel-toggle').onclick=()=>{if(workspace.classList.contains('panel-open')|| (window.innerWidth>1120&&!workspace.classList.contains('panel-closed'))){closePanel();}else{openPanel();setTimeout(renderPage,100);}};$('close-panel').onclick=closePanel;
