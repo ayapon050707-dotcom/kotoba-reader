@@ -7,6 +7,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = PdfWorker;
 const $ = id => document.getElementById(id);
 const state = { pdf:null, page:1, count:0, textByPage:new Map(), ocrByPage:new Map(), selected:'', zoom:1, contrast:1, paper:'#fffdf8', guide:true, focus:false, textMode:false, busy:false, history:[], renderId:0 };
 let currentPageText = '';
+const ocrLayoutByPage = new Map();
 let accessCode = sessionStorage.getItem('kotoba-access-code') || '';
 $('api-status').addEventListener('click', () => {
   const next = window.prompt('输入你在 Vercel 设置的 KOTOBA_ACCESS_CODE（仅在本次浏览器会话保存）', accessCode);
@@ -20,11 +21,44 @@ function setBusy(on, msg=''){state.busy=on; $('reading-status').textContent=msg|
 async function checkHealth(){try{ const r=await fetch('/api/health');const j=await r.json();$('api-status').textContent=j.ready?'✦ 设置 AI 访问码':'AI 待配置';$('api-status').classList.toggle('online',j.ready); }catch{ $('api-status').textContent='AI 离线'; }}
 checkHealth();
 ['upload-top','upload-welcome'].forEach(id=>$(id).addEventListener('click',()=>$('file-input').click()));
-$('file-input').addEventListener('change', async e => { const file=e.target.files?.[0]; if(!file)return; if(!/\.pdf$/i.test(file.name)&&file.type!=='application/pdf'){toast('请选择 PDF 文献。');return;}setBusy(true,'正在加载 PDF…');try{ const bytes=new Uint8Array(await file.arrayBuffer()); const pdf=await pdfjsLib.getDocument({data:bytes,useSystemFonts:true}).promise; state.pdf=pdf;state.page=1;state.count=pdf.numPages;state.textByPage.clear();state.ocrByPage.clear();state.history=[];state.selected='';state.textMode=false;$('filename').textContent=file.name;$('pdf-kind').textContent='PDF · '+state.count+' 页';$('welcome').classList.add('hidden');stage.classList.remove('hidden');await renderPage();toast('已载入文献，可选中文字进行翻译。'); }catch(err){console.error(err);toast('PDF 打开失败。请确认文件未加密或损坏。');}finally{setBusy(false);e.target.value='';}});
+$('file-input').addEventListener('change', async e => { const file=e.target.files?.[0]; if(!file)return; if(!/\.pdf$/i.test(file.name)&&file.type!=='application/pdf'){toast('请选择 PDF 文献。');return;}setBusy(true,'正在加载 PDF…');try{ const bytes=new Uint8Array(await file.arrayBuffer()); const pdf=await pdfjsLib.getDocument({data:bytes,useSystemFonts:true}).promise; state.pdf=pdf;state.page=1;state.count=pdf.numPages;state.textByPage.clear();state.ocrByPage.clear();ocrLayoutByPage.clear();state.history=[];state.selected='';state.textMode=false;$('filename').textContent=file.name;$('pdf-kind').textContent='PDF · '+state.count+' 页';$('welcome').classList.add('hidden');stage.classList.remove('hidden');await renderPage();toast('已载入文献，可选中文字进行翻译。'); }catch(err){console.error(err);toast('PDF 打开失败。请确认文件未加密或损坏。');}finally{setBusy(false);e.target.value='';}});
 async function getText(pageNumber){if(!state.pdf)return '';if(state.ocrByPage.has(pageNumber))return state.ocrByPage.get(pageNumber);if(state.textByPage.has(pageNumber))return state.textByPage.get(pageNumber);try{const page=await state.pdf.getPage(pageNumber);const text=await page.getTextContent();let output='', prevY=null;for(const item of text.items){if(!('str' in item))continue;const y=item.transform?.[5]??0;if(prevY!==null && Math.abs(prevY-y)>5)output+='\n';else if(output && !output.endsWith('\n'))output+=' ';output+=item.str;prevY=y;if(item.hasEOL)output+='\n';}state.textByPage.set(pageNumber,output);return output;}catch{return '';}}
-function fitScale(page){const container=$('reader-scroll');const maxWidth=Math.max(250,container.clientWidth-30);const base=page.getViewport({scale:1});return Math.min(1.5,maxWidth/base.width)*state.zoom;}
+function renderOcrTextLayer(pageNumber, viewport) {
+  const layout = ocrLayoutByPage.get(pageNumber);
+  if (!layout || !layout.blocks?.length) return;
+
+  const scaleX = viewport.width / layout.width;
+  const scaleY = viewport.height / layout.height;
+
+  for (const block of layout.blocks) {
+    for (const paragraph of block.paragraphs || []) {
+      for (const line of paragraph.lines || []) {
+        for (const word of line.words || []) {
+          if (!word.text || !word.bbox) continue;
+
+          const box = word.bbox;
+          const span = document.createElement('span');
+
+          span.textContent = word.text;
+          span.className = 'ocr-word';
+          span.style.left = (box.x0 * scaleX) + 'px';
+          span.style.top = (box.y0 * scaleY) + 'px';
+          span.style.width = ((box.x1 - box.x0) * scaleX) + 'px';
+          span.style.height = ((box.y1 - box.y0) * scaleY) + 'px';
+          span.style.fontSize =
+            ((box.y1 - box.y0) * scaleY) + 'px';
+
+          layer.appendChild(span);
+        }
+      }
+    }
+  }
+}function fitScale(page){const container=$('reader-scroll');const maxWidth=Math.max(250,container.clientWidth-30);const base=page.getViewport({scale:1});return Math.min(1.5,maxWidth/base.width)*state.zoom;}
 async function renderPage(){if(!state.pdf)return;const id=++state.renderId;state.selected='';hidePopover();const page=await state.pdf.getPage(state.page);const scale=fitScale(page);const viewport=page.getViewport({scale});const ratio=Math.min(2,window.devicePixelRatio||1);const context=canvas.getContext('2d');canvas.width=Math.floor(viewport.width*ratio);canvas.height=Math.floor(viewport.height*ratio);canvas.style.width=`${viewport.width}px`;canvas.style.height=`${viewport.height}px`;paper.style.width=`${viewport.width}px`;paper.style.height=`${viewport.height}px`;layer.style.width=`${viewport.width}px`;layer.style.height=`${viewport.height}px`;layer.replaceChildren();const render=page.render({canvasContext:context,viewport,transform:ratio!==1?[ratio,0,0,ratio,0,0]:undefined});await render.promise;if(id!==state.renderId)return;const content=await page.getTextContent();if(id!==state.renderId)return;
 for(const item of content.items){if(!item.str)continue;const tx=pdfjsLib.Util.transform(viewport.transform,item.transform);const fontHeight=Math.hypot(tx[2],tx[3]);const fontAscent=fontHeight*.88;const span=document.createElement('span');span.textContent=item.str;span.style.left=tx[4]+'px';span.style.top=(tx[5]-fontAscent)+'px';span.style.fontSize=fontHeight+'px';span.style.fontFamily='sans-serif';span.style.height=fontHeight+'px';const measuredWidth=Math.max(.1,item.width*viewport.scale);span.dataset.width=String(measuredWidth);layer.append(span);const actual=span.getBoundingClientRect().width;if(actual>0)span.style.transform=`scaleX(${measuredWidth/actual})`;}
+if (ocrLayoutByPage.has(state.page)) {
+  renderOcrTextLayer(state.page, viewport);
+}
 currentPageText=await getText(state.page);const hasText=currentPageText.trim().length>15;$('pdf-kind').textContent=`PDF · ${hasText?'可选文字':'可能是扫描页'}`;$('page-indicator').textContent=`第 ${state.page} / ${state.count} 页`;$('prev-page').disabled=state.page<=1;$('next-page').disabled=state.page>=state.count;
 const ocrAvailable=state.ocrByPage.has(state.page);if(state.textMode){showTextView(ocrAvailable||hasText);}else{paper.classList.remove('hidden');$('text-view').classList.add('hidden');}
 if(!hasText)toast('这页似乎没有文字层。可以点击「识别扫描文字」进行 OCR。');
@@ -53,7 +87,17 @@ $('panel-toggle').onclick=()=>{if(workspace.classList.contains('panel-open')|| (
 function hidePopover(){$('select-popover').classList.add('hidden');}
 function updateSelection(){const selection=window.getSelection();const text=selection?.toString().trim()||'';if(!text || text.length>7000)return;const anchor=selection.anchorNode, focus=selection.focusNode;if(!anchor||!focus)return;const inReader=[layer,$('extracted-text')].some(root=>root.contains(anchor)&&root.contains(focus));if(!inReader)return;state.selected=text;$('selected-preview-text').textContent=text;$('selection-preview').classList.remove('hidden');const pop=$('select-popover');try{const rect=selection.getRangeAt(0).getBoundingClientRect();pop.style.left=clamp(rect.left,8,window.innerWidth-190)+'px';pop.style.top=clamp(rect.top-51,66,window.innerHeight-55)+'px';pop.classList.remove('hidden');}catch{} }
 document.addEventListener('selectionchange',()=>{clearTimeout(window.__selectTimer);window.__selectTimer=setTimeout(updateSelection,280);});document.addEventListener('pointerdown',e=>{if(!$('select-popover').contains(e.target))hidePopover();});
-async function runOcr(){if(!state.pdf||state.busy){if(!state.pdf)toast('请先导入 PDF。');return;}if(state.ocrByPage.has(state.page)){showTextView();toast('已显示此前识别的日语文字。');return;}setBusy(true,'准备日语 OCR 模型（首次使用需下载）…');let worker;try{const page=await state.pdf.getPage(state.page);const viewport=page.getViewport({scale:2});const c=document.createElement('canvas');c.width=Math.round(viewport.width);c.height=Math.round(viewport.height);await page.render({canvasContext:c.getContext('2d'),viewport}).promise;worker=await createWorker('jpn',1,{logger: m=>{if(m.status&&m.progress!==undefined)$('reading-status').textContent=`OCR ${m.status}: ${Math.round(m.progress*100)}%`;}});const result=await worker.recognize(c);const text=result.data.text?.trim()||'';if(!text){toast('没有识别出文字。扫描质量或竖排版式可能影响结果。');return;}state.ocrByPage.set(state.page,text);currentPageText=text;showTextView();$('pdf-kind').textContent='PDF · 日语 OCR';toast('本页 OCR 完成，现在可以长按选择日文。');}catch(err){console.error(err);toast('OCR 失败。请检查网络，首次识别需要下载日语识别模型。');}finally{if(worker)await worker.terminate().catch(()=>{});setBusy(false);}}
+async function runOcr(){if(!state.pdf||state.busy){if(!state.pdf)toast('请先导入 PDF。');return;}if(state.ocrByPage.has(state.page)){
+  state.textMode=false;
+  paper.classList.remove('hidden');
+  $('text-view').classList.add('hidden');
+  toast('本页已完成 OCR，无需重复识别。');
+  return;
+}setBusy(true,'准备日语 OCR 模型（首次使用需下载）…');let worker;try{const page=await state.pdf.getPage(state.page);const viewport=page.getViewport({scale:2});const c=document.createElement('canvas');c.width=Math.round(viewport.width);c.height=Math.round(viewport.height);await page.render({canvasContext:c.getContext('2d'),viewport}).promise;worker=await createWorker('jpn',1,{logger: m=>{if(m.status&&m.progress!==undefined)$('reading-status').textContent=`OCR ${m.status}: ${Math.round(m.progress*100)}%`;}});const result=await worker.recognize(c, {}, { blocks: true });ocrLayoutByPage.set(state.page, {
+  width: c.width,
+  height: c.height,
+  blocks: result.data.blocks || []
+});const text=result.data.text?.trim()||'';if(!text){toast('没有识别出文字。扫描质量或竖排版式可能影响结果。');return;}state.ocrByPage.set(state.page,text);currentPageText=text;await renderPage();state.textMode=false;paper.classList.remove('hidden');$('text-view').classList.add('hidden');$('pdf-kind').textContent='PDF · 日语 OCR';toast('本页 OCR 完成，现在可以长按选择日文。');}catch(err){console.error(err);toast('OCR 失败。请检查网络，首次识别需要下载日语识别模型。');}finally{if(worker)await worker.terminate().catch(()=>{});setBusy(false);}}
 $('ocr-btn').onclick=runOcr;
 function addMessage(role,content,label){$('ai-empty').classList.add('hidden');const msg=document.createElement('div');msg.className='message '+role;const top=document.createElement('div');top.className='message-label';top.textContent=label||(role==='user'?'你':'✦ 言间助手');const body=document.createElement('div');body.textContent=content;msg.append(top,body);$('messages').append(msg);$('ai-body').scrollTop=$('ai-body').scrollHeight;}
 async function requestAI(mode, question=''){if(state.busy)return;if(!accessCode){$('api-status').click();if(!accessCode){toast('需要先设置 AI 访问码。');return;}}if(!state.pdf){toast('先导入要阅读的 PDF。');return;}const selected=state.selected;if(mode!=='page-translate'&&!selected&&!question.trim()){toast('请先在文中选中一句日语，或者输入问题。');return;}const text=await getText(state.page);if(!text.trim()){toast('这一页没有可读取的文字。请先点击「识别扫描文字」。');return;}openPanel();hidePopover();setBusy(true,'正在结合上下文理解文献…');$('loading').classList.remove('hidden');const modeText=mode==='page-translate'?'翻译当前整页':mode==='selection-translate'?'结合上下文翻译选段':question?'提问：'+question:'请解释选中的句子';addMessage('user',modeText+(selected&&mode!=='page-translate'?'\n「'+selected.slice(0,170)+'」':''));try{const [before,after]=await Promise.all([state.page>1?getText(state.page-1):'',state.page<state.count?getText(state.page+1):'']);const result=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json','x-kotoba-code':accessCode},body:JSON.stringify({mode,selected,pageText:text.slice(0,11500),before:before.slice(-1200),after:after.slice(0,1200),question,history:state.history})});const data=await result.json();if(!result.ok)throw new Error(data.error||'请求失败');addMessage('assistant',data.text);if(mode==='ask'){state.history.push({role:'user',content:modeText+'\n'+selected},{role:'assistant',content:data.text});}if(text.length>11500&&mode==='page-translate')toast('本页文字较长，本次只翻译了前 11500 字。');}catch(e){addMessage('assistant','暂时无法完成：'+e.message);toast(e.message);}finally{$('loading').classList.add('hidden');setBusy(false);$('question').value='';}}
