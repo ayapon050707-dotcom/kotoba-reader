@@ -1,0 +1,38 @@
+<!doctype html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#f6f3eb"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>言间 Kotoba · 专注文献阅读</title>
+<link rel="manifest" href="/manifest.webmanifest"/><link rel="apple-touch-icon" href="/icon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet"/>
+</head><body><div id="app">
+<header class="topbar">
+ <div class="brand"><div class="brand-mark">言</div><div><strong>言间 <span>Kotoba</span></strong><small>把注意力留给文字</small></div></div>
+ <div class="header-actions"><button id="api-status" type="button" class="status-dot" title="点击设置个人访问码">检查 AI 中</button><button id="upload-top" class="btn btn-primary">＋ 导入 PDF</button><input id="file-input" type="file" accept="application/pdf,.pdf" hidden></div>
+</header>
+<div class="workspace">
+ <aside class="controls" id="controls">
+  <div class="control-head"><span class="eyebrow">YOUR READING SPACE</span><h2>阅读设置 <span class="sun-icon">✳</span></h2><p>调整到让大脑感觉刚刚好的状态。</p></div>
+  <section class="control-section"><label class="section-label">阅读环境</label>
+   <div class="setting"><span>页面背景</span><div class="swatches"><button class="swatch active" data-paper="#fffdf8" style="--sw:#fffdf8" aria-label="奶油白"></button><button class="swatch" data-paper="#f3eddc" style="--sw:#f3eddc" aria-label="暖米色"></button><button class="swatch" data-paper="#e7ece9" style="--sw:#e7ece9" aria-label="灰绿色"></button><button class="swatch" data-paper="#202a30" style="--sw:#202a30" aria-label="深色"></button></div></div>
+   <div class="setting slider-setting"><div class="setting-row"><label for="contrast">页面对比度</label><output id="contrast-value">100%</output></div><input id="contrast" type="range" min="70" max="140" value="100" /></div>
+   <div class="setting slider-setting"><div class="setting-row"><label for="zoom">页面缩放</label><output id="zoom-value">100%</output></div><input id="zoom" type="range" min="75" max="175" value="100" step="5" /></div>
+  </section>
+  <section class="control-section"><label class="section-label">专注辅助</label>
+   <label class="toggle-line"><span><b>阅读聚焦线</b><small>只突出视线所在的一行</small></span><input type="checkbox" id="line-focus"><span class="toggle"></span></label>
+   <label class="toggle-line"><span><b>沉浸模式</b><small>收起设置，减少页面干扰</small></span><input type="checkbox" id="immersive"><span class="toggle"></span></label>
+   <label class="toggle-line"><span><b>阅读行标尺</b><small>跟随手指或鼠标移动</small></span><input type="checkbox" id="line-guide" checked><span class="toggle"></span></label>
+  </section>
+  <section class="control-section"><label class="section-label">本页工具</label><button id="ocr-btn" class="tool-btn"><span class="tool-icon">▦</span><span><b>识别扫描文字</b><small>日语 OCR，支持图片版 PDF</small></span><span>›</span></button><button id="view-ocr" class="tool-btn"><span class="tool-icon">文</span><span><b>查看可选文字</b><small>便于扫描页划词提问</small></span><span>›</span></button><button id="translate-page" class="tool-btn"><span class="tool-icon">あ</span><span><b>翻译当前整页</b><small>结合相邻页面理解</small></span><span>›</span></button></section>
+  <div class="side-note"><span>✦ 专注提示</span><p>一次只读一小段。遇到读不懂的句子，选中它，不必离开这页。</p></div>
+ </aside>
+ <main class="reader-main"><div class="reader-toolbar"><div class="doc-title"><span class="doc-dot"></span><span id="filename">你的阅读空间</span><small id="pdf-kind">尚未导入文献</small></div><div class="reader-buttons"><button id="focus-toggle" class="icon-btn" title="切换聚焦线">☷</button><button id="settings-toggle" class="icon-btn" title="显示或隐藏设置">⚙</button><button id="panel-toggle" class="icon-btn" title="打开 AI 助手">✦</button></div></div>
+  <div id="reader-scroll" class="reader-scroll"><div id="welcome" class="welcome"><div class="welcome-art"><span class="art-orbit orbit-one"></span><span class="art-orbit orbit-two"></span><div class="book-illustration"><span>あ</span><span>言</span><span>学</span></div><span class="little-star">✧</span></div><span class="eyebrow">READ BETTER, NOT HARDER</span><h1>在这里，慢慢读懂每一页。</h1><p>为日语学术文献而设计。文字版与扫描版 PDF 都能阅读；选择句子，就能翻译或向 GPT 提问。</p><button class="btn btn-primary btn-large" id="upload-welcome">＋ 选择你的 PDF 文献</button><small>文献只在本地浏览器中打开，不会上传到 AI 服务器。只有主动请求 AI 时，相关文本才会发送。</small></div>
+   <div id="pdf-stage" class="pdf-stage hidden"><div id="paper" class="paper"><canvas id="pdf-canvas"></canvas><div id="text-layer" class="text-layer"></div><div id="guide-line" class="guide-line hidden"></div></div><div id="text-view" class="text-view hidden"><div class="text-view-head"><span>已识别文字 · 可以长按选择</span><button id="close-text-view" class="subtle-btn">返回原页 ✕</button></div><div id="extracted-text" class="extracted-text" lang="ja"></div></div></div>
+  </div>
+  <div class="bottom-bar"><div class="page-controls"><button id="prev-page" class="nav-btn" disabled>‹</button><span id="page-indicator">第 0 / 0 页</span><button id="next-page" class="nav-btn" disabled>›</button></div><span id="reading-status" class="reading-status">一个小段落，也算进步。</span><button id="mobile-settings" class="subtle-btn mobile-only">☷ 阅读设置</button></div>
+ </main>
+ <aside id="ai-panel" class="ai-panel"><div class="ai-head"><div class="ai-icon">✦</div><div><span class="eyebrow">CONTEXT-AWARE ASSISTANT</span><h3>文献理解助手</h3></div><button id="close-panel" class="icon-btn">✕</button></div><div class="ai-body"><div class="ai-empty" id="ai-empty"><span>✳</span><h4>有不懂的地方，就在这里问。</h4><p>选中日语句子后点击「结合上下文翻译」或「问 GPT」。也可以直接翻译整页。</p></div><div id="selection-preview" class="selection-preview hidden"><span>当前选中</span><p id="selected-preview-text"></p></div><div id="messages" class="messages"></div><div id="loading" class="loading hidden">✦ 正在结合前后文思考…</div></div><div class="ask-box"><div class="action-row"><button id="selection-translate" class="quick-btn">译 选中翻译</button><button id="ask-selection" class="quick-btn">✦ 询问 GPT</button></div><textarea id="question" rows="2" placeholder="比如：这里的「公共性」是什么意思？"></textarea><div class="submit-row"><small>中文讲解 · 保留日语术语</small><button id="send-question" class="send-btn">发送 ↗</button></div></div></aside>
+</div><div id="select-popover" class="selection-popover hidden"><button id="pop-translate">译 翻译</button><button id="pop-ask">✦ 问 GPT</button></div><div id="toast" class="toast hidden" role="status"></div>
+</div><script type="module" src="/src/main.js"></script></body></html>
